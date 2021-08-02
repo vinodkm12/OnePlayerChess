@@ -1,0 +1,38 @@
+body {
+	background-image : url("wood_background.jpg");
+}
+
+h1 {
+	border-width : 5px;
+	border-style : solid;
+	border-color : black;
+	font-family : "Comic Sans MS", "Comic Sans", Arial;
+	font-weight : bold;
+	text-align : center;
+	color : rgb(209, 195, 174);
+	background-color :rgb(71, 56, 43);
+}
+
+canvas {
+	border-width : 10px 10px 10px 10px;
+	border-style : solid;
+	border-color : black;
+	text-align : center;
+
+}
+
+#winner_bar {
+	text-align : center;
+	font-size : 20pt;
+	font-weight : bold;
+	font-family : "Comic Sans MS", "Comic Sans", Arial;
+}
+
+#Instruction1 {
+	text-align : center;
+	font-size : 11pt;
+	font-family : "Comic Sans MS", "Comic Sans", Arial;
+	font-weight : bold;
+	color : white;
+}
+
