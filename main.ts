@@ -3,7 +3,9 @@
 	Helpers
 */
 const BOARD_SIZE = 480
-const DEPTH = 4
+const DEPTH = 5
+var misses = 0
+var hits = 0
 function filterOnBoard(coord : number[]) {
 	let i : number = coord[0]
 	let j : number  = coord[1]
@@ -22,17 +24,39 @@ function includes(a : number[], listA) {
 	return false;
 }
 
-
-
 /*
 	CPU Class
 */
 class CPU {
+	maxiCache : any;
+	miniCache : any;
+
 	constructor() {
+		this.maxiCache = {};
+		this.miniCache = {};
 	}
 	getMove(board : GameBoard) {
-		let arc =  this.mini(board, DEPTH, -1 * Infinity, Infinity)
-		return arc[0]
+		var myDepth = DEPTH;
+		var numPieces = 0;
+		for (let i = 0; i < 8; i++) {
+			for (let j = 0; j < 8; j++) {
+				if (isDef(board.squares[i][j])) {
+					numPieces++;
+				}
+			}
+		}
+		if (numPieces < 12) {
+			myDepth = DEPTH + 3
+		}
+		if (numPieces < 6) {
+			myDepth = DEPTH + 6
+		}
+		if (this.maxiCache.length > 300000)
+			this.maxiCache = {}
+		if (this.miniCache.length > 300000)
+			this.miniCache = {}
+		let arc =  this.mini(board, myDepth, -1 * Infinity, Infinity);
+		return arc[0];
 	}
 
 	evalBoard(board : GameBoard) {
@@ -63,16 +87,27 @@ class CPU {
 		var moves = []
 		var score : number;
 		var tiebreak : number = 0.0;
+		var key = board.shortstring();
+		let temp = this.maxiCache[key]
+		if (isDef(temp)) {
+			let cacheDepth = temp[0];
+			if (cacheDepth >= depth) {
+				hits++;
+				return temp[1];
+				
+			}
+		}
+		misses++;
 		for (let i = 0; i < 8; i++) {
 			for (let j = 0; j < 8; j++) {
 				if (isDef(board.squares[i][j])) {
-					if (board.squares[i][j].color === "White") {
+					if (board.squares[i][j].color[0] === "W") {
 						let tempList = board.squares[i][j].getMoves(board, i, j)
 						for (let k = 0; k < tempList.length; k++) {
 							moves.push([i, j, tempList[k][0], tempList[k][1]])
 						}
 						if (depth === 0) {
-							if (board.squares[i][j].name === "kingWhite") {
+							if (board.squares[i][j].shortname() === "k") {
 								tiebreak = tiebreak - (tempList.length)/12.0;
 							}
 							else {
@@ -82,7 +117,7 @@ class CPU {
 					}
 					else if (depth === 0) {
 						let tempList = board.squares[i][j].getMoves(board, i, j)
-						if (board.squares[i][j].name === "kingBlack")
+						if (board.squares[i][j].shortname() === "l")
 							tiebreak = tiebreak + (tempList.length)/12.0;
 						else
 							tiebreak = tiebreak - (tempList.length)/42.0;
@@ -104,7 +139,8 @@ class CPU {
 				}
 
 				if (maxScore >= beta) {
-                    board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3])
+                    board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
+					this.maxiCache[key] = [depth, [bestMove, maxScore]];
 					return [bestMove, maxScore];
                 }
 				if (maxScore > alpha)
@@ -129,6 +165,7 @@ class CPU {
 
 					if (maxScore >= beta) {
                         board.reverseMove(arr[0], arr[1],moves[i][0], moves[i][1], moves[i][2], moves[i][3])
+						this.maxiCache[key] = [depth, [bestMove, maxScore]];
 						return [bestMove, maxScore]
                     }
 					if (maxScore > alpha)
@@ -136,7 +173,8 @@ class CPU {
 				}
 				board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3])
 			}
-		}		
+		}
+		this.maxiCache[key] = [depth, [bestMove, maxScore]];		
 		return [bestMove, maxScore]
 	}
 
@@ -144,17 +182,25 @@ class CPU {
 		let moves = []
 		var score;
 		var tiebreak = 0;
+		var key = board.shortstring();
+		let temp = this.miniCache[key]
+		if (isDef(temp)) {
+			if (temp[0] >= depth) {
+				return temp[1];
+			}
+		}
+
 		for (let i = 0; i < 8; i++) {
 			for (let j = 0; j < 8; j++) 
 			{
 				if (isDef(board.squares[i][j])) {
-					if (board.squares[i][j].color === "Black") {
+					if (board.squares[i][j].color[0] === "B") {
 						let tempList = board.squares[i][j].getMoves(board, i, j)
 						for (let k = 0; k < tempList.length; k++) {
 							moves.push([i, j, tempList[k][0], tempList[k][1]])
 						}
 						if (depth === 0) {
-							if (board.squares[i][j].name === "kingBlack") {
+							if (board.squares[i][j].shortname() === "l") {
 								tiebreak = tiebreak + (tempList.length)/12.0;
 							}
 							else {
@@ -164,7 +210,7 @@ class CPU {
 					}
 					else if (depth === 0) {
 						let tempList = board.squares[i][j].getMoves(board, i, j)
-						if (board.squares[i][j].name === "kingWhite")
+						if (board.squares[i][j].shortname() === "k")
 							tiebreak = tiebreak - (tempList.length)/12.0;
 						else
 							tiebreak = tiebreak + (tempList.length)/42.0;
@@ -189,6 +235,7 @@ class CPU {
 					beta = minScore;
 				if (minScore <= alpha) {
                     board.reverseMove(arr[0], arr[1],moves[i][0], moves[i][1], moves[i][2], moves[i][3])
+					this.miniCache[key] = [depth, [bestMove, minScore]];
 					return [bestMove, minScore];
                 }
 				board.reverseMove(arr[0], arr[1],moves[i][0], moves[i][1], moves[i][2], moves[i][3])
@@ -216,20 +263,17 @@ class CPU {
 						beta = minScore;
 					if (minScore <= alpha) {
                         board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3])
+						this.miniCache[key] = [depth, [bestMove, minScore]];
 						return [bestMove, minScore];
                     }
 				}
 				board.reverseMove(arr[0], arr[1],moves[i][0], moves[i][1], moves[i][2], moves[i][3])
 			}
 		}
+		this.miniCache[key] = [depth, [bestMove, minScore]];
 		return [bestMove, minScore, tiebreak]
 	}
 }
-
-
-
-
-
 
 /*
 GameBoard class
@@ -269,6 +313,21 @@ class GameBoard {
 		}
 		this.points = 0
 		this.graveyard = []		
+	}
+
+	//short name 
+	shortstring() {
+		let ans : string = ""
+		for (let row = 0; row < 8; row++) {
+			for (let col = 0; col < 8; col++) {
+				if (isDef(this.squares[row][col]))
+					ans = ans + this.squares[row][col].shortname()
+				else {
+					ans = ans + "z"
+				}
+			}
+		}
+		return ans;
 	}
 
 	//Gets a list of many relevant properties of the chessboard
@@ -408,6 +467,7 @@ class GameBoard {
         document.getElementById("winner_bar").innerHTML = "" + this.points
 	}
 
+	
 
 	//Order: isCapture, isPromotion, isCastle, isEnPessant
 	move(initX : number, initY : number, newX : number, newY : number, suppress : boolean): any[][] {
@@ -453,7 +513,6 @@ class GameBoard {
 				this.graveyard.push([newX, newY, this.squares[newX][newY]])
 				isCapture = true
 			}
-			
 			
 			//White promotion
 			if (this.squares[initX][initY].name.substring(0, 5) === "pawnW" && newY === 0) {
@@ -648,7 +707,7 @@ class GameBoard {
 			//Find the king
 			for (let j = 0; j <= 7; j++) {
 				for (let i = 0; i <= 7; i++) {
-					if (isDef(this.squares[i][j]) && this.squares[i][j].name === "kingBlack") {
+					if (isDef(this.squares[i][j]) && this.squares[i][j].shortname() === "l") {
 						kingSquare = [i, j]
 						i = 8; 
 						j = 8;
@@ -674,7 +733,7 @@ class GameBoard {
 			//Find the king
 			for (let j = 0; j <= 7; j++) {
 				for (let i = 7; i >= 0; i--) {
-					if (isDef(this.squares[i][j]) && this.squares[i][j].name === "kingWhite") {
+					if (isDef(this.squares[i][j]) && this.squares[i][j].shortname() === "k") {
 						kingSquare = [i, j]
 						i = -1; 
 						j = 8;
@@ -759,10 +818,6 @@ class GameBoard {
 	}
 }
 
-
-
-
-
 /*
 	All Pieces
 */
@@ -782,6 +837,7 @@ abstract class Piece {
 	}
     abstract draw(context : any) : void;
     abstract getMoves(board : GameBoard, xPos : number, yPos : number) : any[];
+	abstract shortname() : string; 
 }
 
 class Pawn extends Piece {
@@ -791,7 +847,7 @@ class Pawn extends Piece {
 	}
 	draw() {
 		//this.image = new Image();
-		if (this.color === "Black") {
+		if (this.color[0] === "B") {
 			this.image.src = "pawnBlack.png";
 		}
 		else {
@@ -800,7 +856,7 @@ class Pawn extends Piece {
 	}
 	getMoves (board : GameBoard, xPos : number, yPos : number) {
 		let ans = [];
-		if (this.color === "Black") {
+		if (this.color[0] === "B") {
 			
 			//Push one square down
 			if (!isDef(board.squares[xPos][yPos + 1])) {
@@ -811,14 +867,14 @@ class Pawn extends Piece {
 			//Take to the left
 			if (xPos > 0) {
 				//Take regular
-				if (isDef(board.squares[xPos - 1][yPos + 1]) && board.squares[xPos - 1][yPos + 1].color === "White") {
+				if (isDef(board.squares[xPos - 1][yPos + 1]) && board.squares[xPos - 1][yPos + 1].color[0] === "W") {
 					ans.push([xPos - 1, yPos + 1]);
 				}
 			}
 
 			if (xPos < 7) {
 				//Take to the right
-				if (isDef(board.squares[xPos + 1][yPos + 1]) && board.squares[xPos + 1][yPos + 1].color === "White") {
+				if (isDef(board.squares[xPos + 1][yPos + 1]) && board.squares[xPos + 1][yPos + 1].color[0] === "W") {
 					ans.push([xPos + 1, yPos + 1]);
 				}
 			}
@@ -843,14 +899,14 @@ class Pawn extends Piece {
 			}
 			//Take to the left
 			if (xPos > 0) {
-				if (isDef(board.squares[xPos - 1][yPos - 1]) && board.squares[xPos - 1][yPos - 1].color === "Black") {
+				if (isDef(board.squares[xPos - 1][yPos - 1]) && board.squares[xPos - 1][yPos - 1].color[0] === "B") {
 					ans.push([xPos - 1, yPos - 1]);
 				}
 			}
 
 			if (xPos < 7) {
 				//Take to the right
-				if (isDef(board.squares[xPos + 1][yPos - 1]) && board.squares[xPos + 1][yPos - 1].color === "Black") {
+				if (isDef(board.squares[xPos + 1][yPos - 1]) && board.squares[xPos + 1][yPos - 1].color[0] === "B") {
 					ans.push([xPos + 1, yPos - 1]);
 				}
 			}
@@ -867,6 +923,15 @@ class Pawn extends Piece {
 		}
 		return ans
 	}
+
+	shortname() {
+		if (this.color[0] == "W") {
+			return 'a';
+		}
+		else {
+			return 'b';
+		}
+	}
 }
 
 
@@ -882,7 +947,7 @@ class Knight extends Piece {
 			let newX = xPos + increments[index][0]
 			let newY = yPos + increments[index][1]
 			if (filterOnBoard([newX, newY]))
-			if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color !== this.color)
+			if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color[0] !== this.color[0])
 				ans.push([newX , newY])
 		}
 		return ans
@@ -893,6 +958,14 @@ class Knight extends Piece {
 		}
 		else {
 			this.image.src = "knightWhite.png"
+		}
+	}
+	shortname() {
+		if (this.color[0] == "W") {
+			return 'c';
+		}
+		else {
+			return 'd';
 		}
 	}
 }
@@ -909,7 +982,7 @@ class Bishop extends Piece {
 			let newY = i + yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -923,7 +996,7 @@ class Bishop extends Piece {
 			let newY = i + yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -937,7 +1010,7 @@ class Bishop extends Piece {
 			let newY = yPos - i
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -968,6 +1041,14 @@ class Bishop extends Piece {
 			this.image.src = "bishopWhite.png"
 		}
 	}
+	shortname () {
+		if (this.color[0] == "W") {
+			return 'e';
+		}
+		else {
+			return 'f';
+		}
+	}
 }
 class Rook extends Piece {
 	constructor(name : string, color : string) {
@@ -982,7 +1063,7 @@ class Rook extends Piece {
 			let newY = yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -996,7 +1077,7 @@ class Rook extends Piece {
 			let newY = i + yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1010,7 +1091,7 @@ class Rook extends Piece {
 			let newY = yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1024,7 +1105,7 @@ class Rook extends Piece {
 			let newY = yPos - i
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1036,11 +1117,20 @@ class Rook extends Piece {
 
 
 	draw(context) {
-		if (this.color === "Black") {
+		if (this.color[0] === "B") {
 			this.image.src = "rookBlack.png"
 		}
 		else {
 			this.image.src = "rookWhite.png"
+		}
+	}
+
+	shortname() {
+		if (this.color[0] == "W") {
+			return 'g';
+		}
+		else {
+			return 'h';
 		}
 	}
 }
@@ -1128,7 +1218,7 @@ class Queen extends Piece {
 			let newY = i + yPos
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1142,7 +1232,7 @@ class Queen extends Piece {
 			let newY = yPos - i
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1156,7 +1246,7 @@ class Queen extends Piece {
 			let newY = yPos - i
 			if (!isDef(board.squares[newX][newY]))
 				ans.push([newX, newY])
-			else if (board.squares[newX][newY].color !== this.color){
+			else if (board.squares[newX][newY].color[0] !== this.color[0]){
 				ans.push([newX, newY])
 				break;
 			}
@@ -1168,11 +1258,20 @@ class Queen extends Piece {
 		return ans
 	}
 	draw(context) {
-		if (this.color === "Black") {
+		if (this.color[0] === "B") {
 			this.image.src = "queenBlack.png"
 		}
 		else {
 			this.image.src = "queenWhite.png"
+		}
+	}
+
+	shortname() {
+		if (this.color[0] == "W") {
+			return 'i';
+		}
+		else {
+			return 'j';
 		}
 	}
 }
@@ -1188,10 +1287,10 @@ class King extends Piece {
 			let newX = xPos + increments[index][0]
 			let newY = yPos + increments[index][1]
 			if (filterOnBoard([newX, newY]))
-			if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color !== this.color)
+			if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color[0] !== this.color[0])
 				ans.push([newX , newY])
 		}	
-		if (this.color === "Black" && !board.blackKingHasMoved) {
+		if (this.color[0] === "B" && !board.blackKingHasMoved) {
 			//Castle Queen Side
 			if (!isDef(board.squares[1][0]) && !isDef(board.squares[2][0]) && !isDef(board.squares[3][0]) && !board.blackRook0HasMoved)
 				ans.push([2,0])
@@ -1200,7 +1299,7 @@ class King extends Piece {
 				ans.push([6,0])			
 
 		}
-		else if (this.color === "White" && !board.whiteKingHasMoved){
+		else if (this.color[0] === "W" && !board.whiteKingHasMoved){
 			//Castle Queen Side
 			if (!isDef(board.squares[1][7]) && !isDef(board.squares[2][7]) && !isDef(board.squares[3][7]) && !board.whiteRook0HasMoved)
 				ans.push([2,7])
@@ -1219,9 +1318,16 @@ class King extends Piece {
 			this.image.src = "kingWhite.png"
 		}
 	}
+
+	shortname() {
+		if (this.color == "White") {
+			return 'k';
+		}
+		else {
+			return 'l';
+		}
+	}
 }
-
-
 
 /*
 	Gameplay
@@ -1292,7 +1398,7 @@ canvas.addEventListener('click',
 		//Get the location of this click
 		const xClick = Math.floor((event.clientX - rect.left)/(BOARD_SIZE/8))
 		const yClick = Math.floor((event.clientY - rect.top)/(BOARD_SIZE/8))
-
+		console.log("Hits : " + hits + " Misses: " + misses)
 		//If we clicked on a blank square trying to move it or we picked a square of the wrong color
 		if (!squaresAreHighlighted) {
 			if (  !isDef(board.squares[xClick][yClick])  || (board.squares[xClick][yClick].color === "Black") )   
@@ -1366,8 +1472,6 @@ canvas.addEventListener('click',
 				gameOver = true;
 			}
 
-
-
 			setTimeout(function(){
 				let blacksMove = cpu.getMove(board)
 				blackMove = blacksMove
@@ -1388,10 +1492,6 @@ canvas.addEventListener('click',
 					gameOver = true;
 				}
 			}, 150);
-
-
-
-
 			
 		}
 	}
