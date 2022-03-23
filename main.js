@@ -17,7 +17,9 @@ var __extends = (this && this.__extends) || (function () {
     Helpers
 */
 var BOARD_SIZE = 480;
-var DEPTH = 4;
+var DEPTH = 5;
+var misses = 0;
+var hits = 0;
 function filterOnBoard(coord) {
     var i = coord[0];
     var j = coord[1];
@@ -38,9 +40,30 @@ function includes(a, listA) {
 */
 var CPU = /** @class */ (function () {
     function CPU() {
+        this.maxiCache = {};
+        this.miniCache = {};
     }
     CPU.prototype.getMove = function (board) {
-        var arc = this.mini(board, DEPTH, -1 * Infinity, Infinity);
+        var myDepth = DEPTH;
+        var numPieces = 0;
+        for (var i = 0; i < 8; i++) {
+            for (var j = 0; j < 8; j++) {
+                if (isDef(board.squares[i][j])) {
+                    numPieces++;
+                }
+            }
+        }
+        if (numPieces < 12) {
+            myDepth = DEPTH + 3;
+        }
+        if (numPieces < 6) {
+            myDepth = DEPTH + 6;
+        }
+        if (this.maxiCache.length > 300000)
+            this.maxiCache = {};
+        if (this.miniCache.length > 300000)
+            this.miniCache = {};
+        var arc = this.mini(board, myDepth, -1 * Infinity, Infinity);
         return arc[0];
     };
     CPU.prototype.evalBoard = function (board) {
@@ -69,16 +92,26 @@ var CPU = /** @class */ (function () {
         var moves = [];
         var score;
         var tiebreak = 0.0;
+        var key = board.shortstring();
+        var temp = this.maxiCache[key];
+        if (isDef(temp)) {
+            var cacheDepth = temp[0];
+            if (cacheDepth >= depth) {
+                hits++;
+                return temp[1];
+            }
+        }
+        misses++;
         for (var i = 0; i < 8; i++) {
             for (var j = 0; j < 8; j++) {
                 if (isDef(board.squares[i][j])) {
-                    if (board.squares[i][j].color === "White") {
+                    if (board.squares[i][j].color[0] === "W") {
                         var tempList = board.squares[i][j].getMoves(board, i, j);
                         for (var k = 0; k < tempList.length; k++) {
                             moves.push([i, j, tempList[k][0], tempList[k][1]]);
                         }
                         if (depth === 0) {
-                            if (board.squares[i][j].name === "kingWhite") {
+                            if (board.squares[i][j].shortname() === "k") {
                                 tiebreak = tiebreak - (tempList.length) / 12.0;
                             }
                             else {
@@ -88,7 +121,7 @@ var CPU = /** @class */ (function () {
                     }
                     else if (depth === 0) {
                         var tempList = board.squares[i][j].getMoves(board, i, j);
-                        if (board.squares[i][j].name === "kingBlack")
+                        if (board.squares[i][j].shortname() === "l")
                             tiebreak = tiebreak + (tempList.length) / 12.0;
                         else
                             tiebreak = tiebreak - (tempList.length) / 42.0;
@@ -108,6 +141,7 @@ var CPU = /** @class */ (function () {
                 }
                 if (maxScore >= beta) {
                     board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
+                    this.maxiCache[key] = [depth, [bestMove, maxScore]];
                     return [bestMove, maxScore];
                 }
                 if (maxScore > alpha)
@@ -131,6 +165,7 @@ var CPU = /** @class */ (function () {
                     }
                     if (maxScore >= beta) {
                         board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
+                        this.maxiCache[key] = [depth, [bestMove, maxScore]];
                         return [bestMove, maxScore];
                     }
                     if (maxScore > alpha)
@@ -139,22 +174,30 @@ var CPU = /** @class */ (function () {
                 board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
             }
         }
+        this.maxiCache[key] = [depth, [bestMove, maxScore]];
         return [bestMove, maxScore];
     };
     CPU.prototype.mini = function (board, depth, alpha, beta) {
         var moves = [];
         var score;
         var tiebreak = 0;
+        var key = board.shortstring();
+        var temp = this.miniCache[key];
+        if (isDef(temp)) {
+            if (temp[0] >= depth) {
+                return temp[1];
+            }
+        }
         for (var i = 0; i < 8; i++) {
             for (var j = 0; j < 8; j++) {
                 if (isDef(board.squares[i][j])) {
-                    if (board.squares[i][j].color === "Black") {
+                    if (board.squares[i][j].color[0] === "B") {
                         var tempList = board.squares[i][j].getMoves(board, i, j);
                         for (var k = 0; k < tempList.length; k++) {
                             moves.push([i, j, tempList[k][0], tempList[k][1]]);
                         }
                         if (depth === 0) {
-                            if (board.squares[i][j].name === "kingBlack") {
+                            if (board.squares[i][j].shortname() === "l") {
                                 tiebreak = tiebreak + (tempList.length) / 12.0;
                             }
                             else {
@@ -164,7 +207,7 @@ var CPU = /** @class */ (function () {
                     }
                     else if (depth === 0) {
                         var tempList = board.squares[i][j].getMoves(board, i, j);
-                        if (board.squares[i][j].name === "kingWhite")
+                        if (board.squares[i][j].shortname() === "k")
                             tiebreak = tiebreak - (tempList.length) / 12.0;
                         else
                             tiebreak = tiebreak + (tempList.length) / 42.0;
@@ -186,6 +229,7 @@ var CPU = /** @class */ (function () {
                     beta = minScore;
                 if (minScore <= alpha) {
                     board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
+                    this.miniCache[key] = [depth, [bestMove, minScore]];
                     return [bestMove, minScore];
                 }
                 board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
@@ -211,12 +255,14 @@ var CPU = /** @class */ (function () {
                         beta = minScore;
                     if (minScore <= alpha) {
                         board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
+                        this.miniCache[key] = [depth, [bestMove, minScore]];
                         return [bestMove, minScore];
                     }
                 }
                 board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
             }
         }
+        this.miniCache[key] = [depth, [bestMove, minScore]];
         return [bestMove, minScore, tiebreak];
     };
     return CPU;
@@ -245,6 +291,20 @@ var GameBoard = /** @class */ (function () {
         this.points = 0;
         this.graveyard = [];
     }
+    //short name 
+    GameBoard.prototype.shortstring = function () {
+        var ans = "";
+        for (var row = 0; row < 8; row++) {
+            for (var col = 0; col < 8; col++) {
+                if (isDef(this.squares[row][col]))
+                    ans = ans + this.squares[row][col].shortname();
+                else {
+                    ans = ans + "z";
+                }
+            }
+        }
+        return ans;
+    };
     //Gets a list of many relevant properties of the chessboard
     GameBoard.prototype.getProps = function () {
         var ans = [];
@@ -610,7 +670,7 @@ var GameBoard = /** @class */ (function () {
             //Find the king
             for (var j = 0; j <= 7; j++) {
                 for (var i = 0; i <= 7; i++) {
-                    if (isDef(this.squares[i][j]) && this.squares[i][j].name === "kingBlack") {
+                    if (isDef(this.squares[i][j]) && this.squares[i][j].shortname() === "l") {
                         kingSquare = [i, j];
                         i = 8;
                         j = 8;
@@ -635,7 +695,7 @@ var GameBoard = /** @class */ (function () {
             //Find the king
             for (var j = 0; j <= 7; j++) {
                 for (var i = 7; i >= 0; i--) {
-                    if (isDef(this.squares[i][j]) && this.squares[i][j].name === "kingWhite") {
+                    if (isDef(this.squares[i][j]) && this.squares[i][j].shortname() === "k") {
                         kingSquare = [i, j];
                         i = -1;
                         j = 8;
@@ -732,7 +792,7 @@ var Pawn = /** @class */ (function (_super) {
     }
     Pawn.prototype.draw = function () {
         //this.image = new Image();
-        if (this.color === "Black") {
+        if (this.color[0] === "B") {
             this.image.src = "pawnBlack.png";
         }
         else {
@@ -741,7 +801,7 @@ var Pawn = /** @class */ (function (_super) {
     };
     Pawn.prototype.getMoves = function (board, xPos, yPos) {
         var ans = [];
-        if (this.color === "Black") {
+        if (this.color[0] === "B") {
             //Push one square down
             if (!isDef(board.squares[xPos][yPos + 1])) {
                 ans.push([xPos, yPos + 1]);
@@ -751,13 +811,13 @@ var Pawn = /** @class */ (function (_super) {
             //Take to the left
             if (xPos > 0) {
                 //Take regular
-                if (isDef(board.squares[xPos - 1][yPos + 1]) && board.squares[xPos - 1][yPos + 1].color === "White") {
+                if (isDef(board.squares[xPos - 1][yPos + 1]) && board.squares[xPos - 1][yPos + 1].color[0] === "W") {
                     ans.push([xPos - 1, yPos + 1]);
                 }
             }
             if (xPos < 7) {
                 //Take to the right
-                if (isDef(board.squares[xPos + 1][yPos + 1]) && board.squares[xPos + 1][yPos + 1].color === "White") {
+                if (isDef(board.squares[xPos + 1][yPos + 1]) && board.squares[xPos + 1][yPos + 1].color[0] === "W") {
                     ans.push([xPos + 1, yPos + 1]);
                 }
             }
@@ -779,13 +839,13 @@ var Pawn = /** @class */ (function (_super) {
             }
             //Take to the left
             if (xPos > 0) {
-                if (isDef(board.squares[xPos - 1][yPos - 1]) && board.squares[xPos - 1][yPos - 1].color === "Black") {
+                if (isDef(board.squares[xPos - 1][yPos - 1]) && board.squares[xPos - 1][yPos - 1].color[0] === "B") {
                     ans.push([xPos - 1, yPos - 1]);
                 }
             }
             if (xPos < 7) {
                 //Take to the right
-                if (isDef(board.squares[xPos + 1][yPos - 1]) && board.squares[xPos + 1][yPos - 1].color === "Black") {
+                if (isDef(board.squares[xPos + 1][yPos - 1]) && board.squares[xPos + 1][yPos - 1].color[0] === "B") {
                     ans.push([xPos + 1, yPos - 1]);
                 }
             }
@@ -799,6 +859,14 @@ var Pawn = /** @class */ (function (_super) {
             }
         }
         return ans;
+    };
+    Pawn.prototype.shortname = function () {
+        if (this.color[0] == "W") {
+            return 'a';
+        }
+        else {
+            return 'b';
+        }
     };
     return Pawn;
 }(Piece));
@@ -816,7 +884,7 @@ var Knight = /** @class */ (function (_super) {
             var newX = xPos + increments[index][0];
             var newY = yPos + increments[index][1];
             if (filterOnBoard([newX, newY]))
-                if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color !== this.color)
+                if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color[0] !== this.color[0])
                     ans.push([newX, newY]);
         }
         return ans;
@@ -827,6 +895,14 @@ var Knight = /** @class */ (function (_super) {
         }
         else {
             this.image.src = "knightWhite.png";
+        }
+    };
+    Knight.prototype.shortname = function () {
+        if (this.color[0] == "W") {
+            return 'c';
+        }
+        else {
+            return 'd';
         }
     };
     return Knight;
@@ -846,7 +922,7 @@ var Bishop = /** @class */ (function (_super) {
             var newY = i + yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -859,7 +935,7 @@ var Bishop = /** @class */ (function (_super) {
             var newY = i + yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -872,7 +948,7 @@ var Bishop = /** @class */ (function (_super) {
             var newY = yPos - i;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -902,6 +978,14 @@ var Bishop = /** @class */ (function (_super) {
             this.image.src = "bishopWhite.png";
         }
     };
+    Bishop.prototype.shortname = function () {
+        if (this.color[0] == "W") {
+            return 'e';
+        }
+        else {
+            return 'f';
+        }
+    };
     return Bishop;
 }(Piece));
 var Rook = /** @class */ (function (_super) {
@@ -919,7 +1003,7 @@ var Rook = /** @class */ (function (_super) {
             var newY = yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -932,7 +1016,7 @@ var Rook = /** @class */ (function (_super) {
             var newY = i + yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -945,7 +1029,7 @@ var Rook = /** @class */ (function (_super) {
             var newY = yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -958,7 +1042,7 @@ var Rook = /** @class */ (function (_super) {
             var newY = yPos - i;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -968,11 +1052,19 @@ var Rook = /** @class */ (function (_super) {
         return ans;
     };
     Rook.prototype.draw = function (context) {
-        if (this.color === "Black") {
+        if (this.color[0] === "B") {
             this.image.src = "rookBlack.png";
         }
         else {
             this.image.src = "rookWhite.png";
+        }
+    };
+    Rook.prototype.shortname = function () {
+        if (this.color[0] == "W") {
+            return 'g';
+        }
+        else {
+            return 'h';
         }
     };
     return Rook;
@@ -1057,7 +1149,7 @@ var Queen = /** @class */ (function (_super) {
             var newY = i + yPos;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -1070,7 +1162,7 @@ var Queen = /** @class */ (function (_super) {
             var newY = yPos - i;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -1083,7 +1175,7 @@ var Queen = /** @class */ (function (_super) {
             var newY = yPos - i;
             if (!isDef(board.squares[newX][newY]))
                 ans.push([newX, newY]);
-            else if (board.squares[newX][newY].color !== this.color) {
+            else if (board.squares[newX][newY].color[0] !== this.color[0]) {
                 ans.push([newX, newY]);
                 break;
             }
@@ -1094,11 +1186,19 @@ var Queen = /** @class */ (function (_super) {
         return ans;
     };
     Queen.prototype.draw = function (context) {
-        if (this.color === "Black") {
+        if (this.color[0] === "B") {
             this.image.src = "queenBlack.png";
         }
         else {
             this.image.src = "queenWhite.png";
+        }
+    };
+    Queen.prototype.shortname = function () {
+        if (this.color[0] == "W") {
+            return 'i';
+        }
+        else {
+            return 'j';
         }
     };
     return Queen;
@@ -1117,10 +1217,10 @@ var King = /** @class */ (function (_super) {
             var newX = xPos + increments[index][0];
             var newY = yPos + increments[index][1];
             if (filterOnBoard([newX, newY]))
-                if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color !== this.color)
+                if (!isDef(board.squares[newX][newY]) || board.squares[newX][newY].color[0] !== this.color[0])
                     ans.push([newX, newY]);
         }
-        if (this.color === "Black" && !board.blackKingHasMoved) {
+        if (this.color[0] === "B" && !board.blackKingHasMoved) {
             //Castle Queen Side
             if (!isDef(board.squares[1][0]) && !isDef(board.squares[2][0]) && !isDef(board.squares[3][0]) && !board.blackRook0HasMoved)
                 ans.push([2, 0]);
@@ -1128,7 +1228,7 @@ var King = /** @class */ (function (_super) {
             if (!isDef(board.squares[5][0]) && !isDef(board.squares[6][0]) && !board.blackRook1HasMoved)
                 ans.push([6, 0]);
         }
-        else if (this.color === "White" && !board.whiteKingHasMoved) {
+        else if (this.color[0] === "W" && !board.whiteKingHasMoved) {
             //Castle Queen Side
             if (!isDef(board.squares[1][7]) && !isDef(board.squares[2][7]) && !isDef(board.squares[3][7]) && !board.whiteRook0HasMoved)
                 ans.push([2, 7]);
@@ -1144,6 +1244,14 @@ var King = /** @class */ (function (_super) {
         }
         else {
             this.image.src = "kingWhite.png";
+        }
+    };
+    King.prototype.shortname = function () {
+        if (this.color == "White") {
+            return 'k';
+        }
+        else {
+            return 'l';
         }
     };
     return King;
@@ -1181,7 +1289,6 @@ var cpu = new CPU();
 var undoButton = document.getElementById("undo_button");
 undoButton.addEventListener('click', function (event) {
     if (whiteProps !== null && blackProps !== null) {
-        console.log("Hi");
         board.reverseMove(blackProps[0], blackProps[1], blackMove[0], blackMove[1], blackMove[2], blackMove[3]);
         board.reverseMove(whiteProps[0], whiteProps[1], whiteMove[0], whiteMove[1], whiteMove[2], whiteMove[3]);
         board.update(null, context);
@@ -1200,6 +1307,7 @@ canvas.addEventListener('click', function (event) {
     //Get the location of this click
     var xClick = Math.floor((event.clientX - rect.left) / (BOARD_SIZE / 8));
     var yClick = Math.floor((event.clientY - rect.top) / (BOARD_SIZE / 8));
+    console.log("Hits : " + hits + " Misses: " + misses);
     //If we clicked on a blank square trying to move it or we picked a square of the wrong color
     if (!squaresAreHighlighted) {
         if (!isDef(board.squares[xClick][yClick]) || (board.squares[xClick][yClick].color === "Black"))
