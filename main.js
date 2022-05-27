@@ -17,7 +17,7 @@ var __extends = (this && this.__extends) || (function () {
     Helpers
 */
 var BOARD_SIZE = 480;
-var DEPTH = 5;
+var DEPTH = 4;
 var misses = 0;
 var hits = 0;
 function filterOnBoard(coord) {
@@ -28,6 +28,8 @@ function filterOnBoard(coord) {
 function isDef(x) {
     return !(x === undefined || x === null);
 }
+//a is guaranteed to be a size 2 list
+//listA is a list of size 2 lists
 function includes(a, listA) {
     for (var i = 0; i < listA.length; i++) {
         if (listA[i][0] === a[0] && listA[i][1] === a[1])
@@ -43,6 +45,8 @@ var CPU = /** @class */ (function () {
         this.maxiCache = {};
         this.miniCache = {};
     }
+    //CPU is guaranteed to be black
+    //Return the mini of the current board with alpha and beta uninitialized
     CPU.prototype.getMove = function (board) {
         var myDepth = DEPTH;
         var numPieces = 0;
@@ -88,6 +92,7 @@ var CPU = /** @class */ (function () {
         }
         return ans;
     };
+    //Return format: [best move, maximum achievable score, optional : tiebreak value]
     CPU.prototype.maxi = function (board, depth, alpha, beta) {
         var moves = [];
         var score;
@@ -177,6 +182,7 @@ var CPU = /** @class */ (function () {
         this.maxiCache[key] = [depth, [bestMove, maxScore]];
         return [bestMove, maxScore];
     };
+    //Return format: [best move, minimum achievable score, optional : tiebreak value]
     CPU.prototype.mini = function (board, depth, alpha, beta) {
         var moves = [];
         var score;
@@ -220,7 +226,12 @@ var CPU = /** @class */ (function () {
         if (depth === 0) {
             for (var i = 0; i < moves.length; i++) {
                 var arr = board.move(moves[i][0], moves[i][1], moves[i][2], moves[i][3], true);
-                score = board.points * 10.0 + tiebreak;
+                if (!arr[0][0]) //is not a capture
+                    score = board.points * 10.0 + tiebreak;
+                else {
+                    pair = this.maxi(board, 0, alpha, beta);
+                    score = pair[1];
+                }
                 if (score < minScore) {
                     minScore = score;
                     bestMove = moves[i];
@@ -306,6 +317,8 @@ var GameBoard = /** @class */ (function () {
         return ans;
     };
     //Gets a list of many relevant properties of the chessboard
+    //[blackKingHasMoved, whiteKingHasMoved, blackRook0HasMoved, blackRook1HasMoved, whiteRook0HasMoved, whiteRook1HasMoved, 
+    //   gameOver, board points, justMoved(a pawn)TwoSquares]
     GameBoard.prototype.getProps = function () {
         var ans = [];
         ans.push(this.blackKingHasMoved);
@@ -447,6 +460,10 @@ var GameBoard = /** @class */ (function () {
         document.getElementById("winner_bar").innerHTML = "" + this.points;
     };
     //Order: isCapture, isPromotion, isCastle, isEnPessant
+    //Return value: [move properties list, stored properties (before move executed), square changed 1, square changed 2, ...]
+    //Move properties list format: [isCapture, isPromotion, isCastle, isEnPessant]
+    //Stored properties list format: [blackKingHasMoved, whiteKingHasMoved, blackRook0HasMoved, blackRook1HasMoved, 
+    //     whiteRook0HasMoved, whiteRook1HasMoved, gameOver, board points, justMoved(a pawn)TwoSquares]
     GameBoard.prototype.move = function (initX, initY, newX, newY, suppress) {
         var ans = [];
         var isCapture = false;
@@ -741,6 +758,8 @@ var GameBoard = /** @class */ (function () {
             opColor = "Black";
         var flag = true;
         var mmoves;
+        var blackKingExists = false;
+        var whiteKingExists = false;
         for (var i = 0; i <= 7; i++) {
             for (var j = 0; j <= 7; j++) {
                 if (isDef(this.squares[i][j]) && this.squares[i][j].color === opColor) {
@@ -748,13 +767,24 @@ var GameBoard = /** @class */ (function () {
                     for (var cnt = 0; cnt < mmoves.length; cnt++) {
                         if (!this.moveUnderCheck(opColor, i, j, mmoves[cnt][0], mmoves[cnt][1])) {
                             flag = false;
-                            i = 8;
-                            j = 8;
                             break;
                         }
                     }
                 }
+                if (isDef(this.squares[i][j]) && this.squares[i][j].name == 'kingBlack')
+                    blackKingExists = true;
+                if (isDef(this.squares[i][j]) && this.squares[i][j].name == 'kingWhite')
+                    whiteKingExists = true;
             }
+        }
+        if ((!blackKingExists) && (!whiteKingExists)) {
+            return "Draw";
+        }
+        else if (!blackKingExists) {
+            return "White";
+        }
+        else if (!whiteKingExists) {
+            return "Black";
         }
         if (flag) {
             if (this.lookForChecks(myColor).length > 1) {

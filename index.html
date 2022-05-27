@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head> 
@@ -7,10 +8,14 @@
 </head>
 <body>
     <h1> One-Player Chess Game  </h1>
-	<p id = "Instruction1"> Refresh to restart game </p>
+	<p id = "Instruction1"> Refresh to restart game. You must win, a draw is a loss! </p>
 	<div style = "text-align : center">
 	<canvas id = "canvas" width = "480" height = "480" > 	
 	</canvas> </div>
 	<div  id = "winner_bar">  </div>
+	<div style = "text-align : center">
+		<button type="button" id = "undo_button"> Undo Move </button>
+		<button type="button" id = "draw_button"> Offer Draw </button>
+	</div>
 </body>
 </html>

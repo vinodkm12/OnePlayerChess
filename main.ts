@@ -3,7 +3,7 @@
 	Helpers
 */
 const BOARD_SIZE = 480
-const DEPTH = 5
+const DEPTH = 4
 var misses = 0
 var hits = 0
 function filterOnBoard(coord : number[]) {
@@ -16,6 +16,8 @@ function isDef(x : any) {
 	return !(x === undefined || x === null)
 }
 
+//a is guaranteed to be a size 2 list
+//listA is a list of size 2 lists
 function includes(a : number[], listA) {
 	for (let i = 0; i < listA.length; i++) {
 		if (listA[i][0] === a[0] && listA[i][1] === a[1])
@@ -35,6 +37,9 @@ class CPU {
 		this.maxiCache = {};
 		this.miniCache = {};
 	}
+
+	//CPU is guaranteed to be black
+	//Return the mini of the current board with alpha and beta uninitialized
 	getMove(board : GameBoard) {
 		var myDepth = DEPTH;
 		var numPieces = 0;
@@ -83,6 +88,7 @@ class CPU {
 		return ans
 	}
 
+	//Return format: [best move, maximum achievable score, optional : tiebreak value]
 	maxi(board : GameBoard, depth : number, alpha : number, beta : number) {
 		var moves = []
 		var score : number;
@@ -131,13 +137,11 @@ class CPU {
 		if (depth === 0) {
 			for (let i = 0; i < moves.length; i++) {
 				let arr = board.move(moves[i][0], moves[i][1], moves[i][2], moves[i][3], true)
-
 				score = board.points * 10.0 + tiebreak
 				if (score > maxScore) {
 					maxScore = score;
 					bestMove = moves[i]
 				}
-
 				if (maxScore >= beta) {
                     board.reverseMove(arr[0], arr[1], moves[i][0], moves[i][1], moves[i][2], moves[i][3]);
 					this.maxiCache[key] = [depth, [bestMove, maxScore]];
@@ -162,7 +166,6 @@ class CPU {
 						maxScore = score;
 						bestMove = moves[i]
 					}
-
 					if (maxScore >= beta) {
                         board.reverseMove(arr[0], arr[1],moves[i][0], moves[i][1], moves[i][2], moves[i][3])
 						this.maxiCache[key] = [depth, [bestMove, maxScore]];
@@ -178,6 +181,7 @@ class CPU {
 		return [bestMove, maxScore]
 	}
 
+	//Return format: [best move, minimum achievable score, optional : tiebreak value]
 	mini (board : GameBoard, depth : number, alpha : number, beta : number) {
 		let moves = []
 		var score;
@@ -189,7 +193,6 @@ class CPU {
 				return temp[1];
 			}
 		}
-
 		for (let i = 0; i < 8; i++) {
 			for (let j = 0; j < 8; j++) 
 			{
@@ -224,13 +227,16 @@ class CPU {
 		if (depth === 0) {
 			for (let i = 0; i < moves.length; i++) {
 				let arr = board.move(moves[i][0], moves[i][1], moves[i][2], moves[i][3], true)
-
-				score = board.points * 10.0 + tiebreak 
+				if (!arr[0][0]) //is not a capture
+					score = board.points * 10.0 + tiebreak
+				else {
+					pair = this.maxi(board, 0, alpha, beta)
+					score = pair[1]
+				}
 				if (score < minScore) {
 					minScore = score;
 					bestMove = moves[i]
 				}
-
 				if (minScore < beta)
 					beta = minScore;
 				if (minScore <= alpha) {
@@ -244,7 +250,6 @@ class CPU {
 		else {
 			for (let i = 0; i < moves.length; i++) {
 				let arr = board.move(moves[i][0], moves[i][1], moves[i][2], moves[i][3], true)
-				
 				var pair;
 				if (!board.gameOver) {
 					pair = this.maxi(board, depth-1, alpha, beta)
@@ -258,7 +263,6 @@ class CPU {
 						minScore = score;
 						bestMove = moves[i]
 					}
-
 					if (minScore < beta)
 						beta = minScore;
 					if (minScore <= alpha) {
@@ -331,6 +335,8 @@ class GameBoard {
 	}
 
 	//Gets a list of many relevant properties of the chessboard
+	//[blackKingHasMoved, whiteKingHasMoved, blackRook0HasMoved, blackRook1HasMoved, whiteRook0HasMoved, whiteRook1HasMoved, 
+    //   gameOver, board points, justMoved(a pawn)TwoSquares]
 	getProps() {
 		let ans : any[] = [];
 		ans.push(this.blackKingHasMoved);
@@ -470,6 +476,10 @@ class GameBoard {
 	
 
 	//Order: isCapture, isPromotion, isCastle, isEnPessant
+	//Return value: [move properties list, stored properties (before move executed), square changed 1, square changed 2, ...]
+	//Move properties list format: [isCapture, isPromotion, isCastle, isEnPessant]
+	//Stored properties list format: [blackKingHasMoved, whiteKingHasMoved, blackRook0HasMoved, blackRook1HasMoved, 
+	//     whiteRook0HasMoved, whiteRook1HasMoved, gameOver, board points, justMoved(a pawn)TwoSquares]
 	move(initX : number, initY : number, newX : number, newY : number, suppress : boolean): any[][] {
 		var ans = []
 		var isCapture: boolean = false
@@ -787,6 +797,10 @@ class GameBoard {
 
 		var flag : boolean = true;
 		var mmoves;
+
+		let blackKingExists : boolean = false
+		let whiteKingExists : boolean = false
+
 		for (let i = 0; i <= 7; i++) {
 			for (let j = 0; j <= 7; j++) {
 				if (isDef(this.squares[i][j]) && this.squares[i][j].color === opColor) {
@@ -794,15 +808,28 @@ class GameBoard {
 					for (let cnt = 0; cnt < mmoves.length; cnt++) {
 						if (!this.moveUnderCheck(opColor, i, j, mmoves[cnt][0], mmoves[cnt][1])) {
 							flag = false;
-							i = 8;
-							j = 8;
 							break;
 						}
 					}
 				}
+				if (isDef(this.squares[i][j]) && this.squares[i][j].name == 'kingBlack')
+					blackKingExists = true
+				if (isDef(this.squares[i][j]) && this.squares[i][j].name == 'kingWhite')
+					whiteKingExists = true
 			}
 		}
 		
+
+		if ((!blackKingExists) && (!whiteKingExists)) {
+			return "Draw"
+		}
+		else if (!blackKingExists){
+			return "White"
+		}
+		else if (!whiteKingExists) {
+			return "Black"
+		}
+
 		if (flag) {
 			if ( this.lookForChecks(myColor).length > 1) {
 				return myColor
